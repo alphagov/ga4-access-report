@@ -3,61 +3,59 @@ import pandas as pd
 from datetime import datetime
 from google.auth import default
 
-SCOPES = ['https://www.googleapis.com/auth/analytics.readonly']
+SCOPES = ['https://www.googleapis.com/auth/analytics.readonly', 'https://www.googleapis.com/auth/bigquery']
 PROJECT = 'ga4-analytics-352613'
+creds, _ = default(scopes=SCOPES, default_scopes=SCOPES, quota_project_id=PROJECT)
 
-creds, _ = default(scopes=SCOPES, quota_project_id=PROJECT)
-client = AnalyticsAdminServiceClient(credentials=creds)
-#client = AnalyticsAdminServiceClient()
 
-access_dict = {
-  "entity":"properties/330577055",
-  "date_ranges": [
-    {
-      "start_date": "2daysAgo",
-      "end_date": "1daysAgo"
+def get_access_report(n):
+    client = AnalyticsAdminServiceClient(credentials=creds)
+    access_dict = {
+      "entity": "properties/330577055",
+      "date_ranges": [
+        {
+          "start_date": f"{n}daysAgo",
+          "end_date": f"{n}daysAgo"
+        }
+      ],
+      "dimensions": [
+        {
+          "dimension_name": "epochTimeMicros"
+        },
+        {
+          "dimension_name": "userEmail"
+        },
+        {
+          "dimension_name": "accessMechanism"
+        },
+        {
+          "dimension_name": "accessorAppName"
+        },
+        {
+          "dimension_name": "dataApiQuotaCategory"
+        },
+        {
+          "dimension_name": "reportType"
+        }
+      ],
+      "metrics": [
+        {
+          "metric_name": "accessCount"
+        },
+        {
+          "metric_name": "dataApiQuotaPropertyTokensConsumed"
+        }
+      ]
     }
-  ],
-  "dimensions": [
-    {
-      "dimension_name": "epochTimeMicros"
-    },
-    {
-      "dimension_name": "userEmail"
-    },
-    {
-      "dimension_name": "accessMechanism"
-    },
-    {
-      "dimension_name": "accessorAppName"
-    },
-    {
-      "dimension_name": "dataApiQuotaCategory"
-    },
-    {
-      "dimension_name": "reportType"
-    }
+
+    access_records = client.run_access_report(access_dict)
+    return access_records
 
 
-  ],
-  "metrics": [
-    {
-      "metric_name": "accessCount"
-    },
-    {
-      "metric_name": "dataApiQuotaPropertyTokensConsumed"
-    }
-  ]
-}
-
-access_records = client.run_access_report(access_dict)
-
-def print_access_report(response):
-    """Prints the access report."""
+def format_access_report(response):
     access_list = []
 
     for rowIdx, row in enumerate(response.rows):
-        #print(f"\nRow {rowIdx}")
         dims = {}
         for i, dimension_value in enumerate(row.dimension_values):
             dimension_name = response.dimension_headers[i].dimension_name
@@ -68,18 +66,45 @@ def print_access_report(response):
                 )
             else:
                 dimension_value_formatted = dimension_value.value
-            #print(f"{dimension_name}: {dimension_value_formatted}")
-            dims[dimension_name]= dimension_value_formatted 
-            
+            dims[dimension_name] = dimension_value_formatted
 
         for i, metric_value in enumerate(row.metric_values):
             metric_name = response.metric_headers[i].metric_name
-            #print(f"{metric_name}: {metric_value.value}")
-            dims[metric_name] =  metric_value.value
+            dims[metric_name] = metric_value.value
         access_list.append(dims)
     df = pd.DataFrame(access_list)
     return df
 
-df = print_access_report(access_records)
 
-print(df)
+def send_to_bq(df):
+    df['accessCount'] = pd.to_numeric(df['accessCount'])
+    df['dataApiQuotaPropertyTokensConsumed'] = pd.to_numeric(df['dataApiQuotaPropertyTokensConsumed'])
+    ts = df['epochTimeMicros'].max()
+    table = ts.strftime('%Y%m%d')
+
+    df.to_gbq(
+        f'ga4_logs.{table}',
+        project_id='ga4-analytics-352613',
+        chunksize=None,
+        reauth=False,
+        if_exists='fail',
+        auth_local_webserver=True,
+        table_schema=None,
+        location=None,
+        progress_bar=True,
+        credentials=creds
+        )
+
+
+def run(n=1):
+    try:
+        access_records = get_access_report(n)
+        df = format_access_report(access_records)
+        send_to_bq(df)
+    except Exception as e:
+        print(df.head(n=5))
+        print(e)
+
+
+if __name__ == '__main__':
+    run(1)
