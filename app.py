@@ -2,13 +2,14 @@ from google.analytics.admin import AnalyticsAdminServiceClient
 import pandas as pd
 from datetime import datetime
 from google.auth import default
+import functions_framework
 
 SCOPES = ['https://www.googleapis.com/auth/analytics.readonly', 'https://www.googleapis.com/auth/bigquery']
 PROJECT = 'ga4-analytics-352613'
 creds, _ = default(scopes=SCOPES, default_scopes=SCOPES, quota_project_id=PROJECT)
 
 
-def get_access_report(n):
+def get_access_report(n=1):
     client = AnalyticsAdminServiceClient(credentials=creds)
     access_dict = {
       "entity": "properties/330577055",
@@ -73,17 +74,26 @@ def format_access_report(response):
             dims[metric_name] = metric_value.value
         access_list.append(dims)
     df = pd.DataFrame(access_list)
+    df = df.rename(columns={
+      'epochTimeMicros': 'epoch_time_micros',
+      'userEmail': 'user_email',
+      'accessMechanism': 'access_mechanism',
+      'accessorAppName': 'accessor_app_name',
+      'dataApiQuotaCategory': 'api_quota_category',
+      'reportType': 'report_type',
+      'accessCount': 'access_count',
+      'dataApiQuotaPropertyTokensConsumed': 'api_tokens_consumed'})
     return df
 
 
 def send_to_bq(df):
-    df['accessCount'] = pd.to_numeric(df['accessCount'])
-    df['dataApiQuotaPropertyTokensConsumed'] = pd.to_numeric(df['dataApiQuotaPropertyTokensConsumed'])
-    ts = df['epochTimeMicros'].max()
+    df['access_count'] = pd.to_numeric(df['access_count'])
+    df['api_tokens_consumed'] = pd.to_numeric(df['api_tokens_consumed'])
+    ts = df['epoch_time_micros'].max()
     table = ts.strftime('%Y%m%d')
 
     df.to_gbq(
-        f'ga4_logs.{table}',
+        f'ga4_logs.ga4_logs_{table}',
         project_id='ga4-analytics-352613',
         chunksize=None,
         reauth=False,
@@ -96,15 +106,19 @@ def send_to_bq(df):
         )
 
 
-def run(n=1):
+@functions_framework.http
+def run(n):
+    access_records = get_access_report(n)
+    df = format_access_report(access_records)
     try:
-        access_records = get_access_report(n)
-        df = format_access_report(access_records)
         send_to_bq(df)
+        return "all good"
     except Exception as e:
         print(df.head(n=5))
         print(e)
+        return "all bad"
 
 
 if __name__ == '__main__':
-    run(1)
+    for n in range(1,2):
+        run(n)
