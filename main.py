@@ -2,16 +2,22 @@ from google.analytics.admin import AnalyticsAdminServiceClient
 import pandas as pd
 from datetime import datetime
 from google.auth import default
+import functions_framework
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 SCOPES = ['https://www.googleapis.com/auth/analytics.readonly', 'https://www.googleapis.com/auth/bigquery']
-PROJECT = 'ga4-analytics-352613'
+PROJECT = os.getenv('GCP_PROJECT_ID')
 creds, _ = default(scopes=SCOPES, default_scopes=SCOPES, quota_project_id=PROJECT)
+GA4_ENTITY = os.getenv('GA4_ENTITY')
 
 
 def get_access_report(n):
     client = AnalyticsAdminServiceClient(credentials=creds)
     access_dict = {
-      "entity": "properties/330577055",
+      "entity": GA4_ENTITY,
       "date_ranges": [
         {
           "start_date": f"{n}daysAgo",
@@ -57,6 +63,7 @@ def format_access_report(response):
 
     for rowIdx, row in enumerate(response.rows):
         dims = {}
+
         for i, dimension_value in enumerate(row.dimension_values):
             dimension_name = response.dimension_headers[i].dimension_name
             if dimension_name.endswith("Micros"):
@@ -72,19 +79,29 @@ def format_access_report(response):
             metric_name = response.metric_headers[i].metric_name
             dims[metric_name] = metric_value.value
         access_list.append(dims)
+
     df = pd.DataFrame(access_list)
+    df = df.rename(columns={
+      'epochTimeMicros': 'epoch_time_micros',
+      'userEmail': 'user_email',
+      'accessMechanism': 'access_mechanism',
+      'accessorAppName': 'accessor_app_name',
+      'dataApiQuotaCategory': 'api_quota_category',
+      'reportType': 'report_type',
+      'accessCount': 'access_count',
+      'dataApiQuotaPropertyTokensConsumed': 'api_tokens_consumed'})
     return df
 
 
 def send_to_bq(df):
-    df['accessCount'] = pd.to_numeric(df['accessCount'])
-    df['dataApiQuotaPropertyTokensConsumed'] = pd.to_numeric(df['dataApiQuotaPropertyTokensConsumed'])
-    ts = df['epochTimeMicros'].max()
+    df['access_count'] = pd.to_numeric(df['access_count'])
+    df['api_tokens_consumed'] = pd.to_numeric(df['api_tokens_consumed'])
+    ts = df['epoch_time_micros'].max()
     table = ts.strftime('%Y%m%d')
 
     df.to_gbq(
-        f'ga4_logs.{table}',
-        project_id='ga4-analytics-352613',
+        f'ga4_logs.ga4_logs_{table}',
+        project_id=PROJECT,
         chunksize=None,
         reauth=False,
         if_exists='fail',
@@ -96,15 +113,18 @@ def send_to_bq(df):
         )
 
 
+@functions_framework.http
 def run(n=1):
+    access_records = get_access_report(n)
+    df = format_access_report(access_records)
     try:
-        access_records = get_access_report(n)
-        df = format_access_report(access_records)
         send_to_bq(df)
+        return "all good"
     except Exception as e:
         print(df.head(n=5))
         print(e)
+        return "all bad"
 
 
 if __name__ == '__main__':
-    run(1)
+    run()
