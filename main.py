@@ -114,7 +114,7 @@ def send_to_bq(df):
 
 
 @functions_framework.http
-def run(n=1):
+def run(request, n=1):
     access_records = get_access_report(n)
     df = format_access_report(access_records)
     try:
@@ -127,4 +127,4 @@ def run(n=1):
 
 
 if __name__ == '__main__':
-    run()
+    run(request='', n=1)
