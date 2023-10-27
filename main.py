@@ -4,6 +4,7 @@ from datetime import datetime
 from google.auth import default
 import functions_framework
 import os
+import re
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -96,6 +97,7 @@ def format_access_report(response):
 def send_to_bq(df):
     df['access_count'] = pd.to_numeric(df['access_count'])
     df['api_tokens_consumed'] = pd.to_numeric(df['api_tokens_consumed'])
+    df['domain'] = df['user_email'].apply(lambda x: re.search(r'@.*$', str(x)).group())
     ts = df['epoch_time_micros'].max()
     table = ts.strftime('%Y%m%d')
 
