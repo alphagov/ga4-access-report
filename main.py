@@ -24,6 +24,7 @@ def get_access_report(n):
     client = AnalyticsAdminServiceClient(credentials=creds)
     access_dict = {
       "entity": GA4_ENTITY,
+      "limit": 100000,
       "date_ranges": [
         {
           "start_date": f"{n}daysAgo",
@@ -96,13 +97,19 @@ def format_access_report(response):
       'reportType': 'report_type',
       'accessCount': 'access_count',
       'dataApiQuotaPropertyTokensConsumed': 'api_tokens_consumed'})
-    return df
 
-
-def send_to_bq(df):
     df['access_count'] = pd.to_numeric(df['access_count'])
     df['api_tokens_consumed'] = pd.to_numeric(df['api_tokens_consumed'])
     df['domain'] = df['user_email'].apply(lambda x: re.search(r'@.*$', str(x)).group())
+    df.set_index('epoch_time_micros', inplace=True)
+    output = df.resample('min').sum()
+    return output
+
+
+def send_to_bq(df):
+    ts = df['epoch_time_micros'].max()
+    table = ts.strftime('%Y%m%d')
+
 
     df.to_gbq(
         'ga4_logs.ga4_logs',
