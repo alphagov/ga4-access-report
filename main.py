@@ -9,9 +9,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-SCOPES = ['https://www.googleapis.com/auth/analytics.readonly', 'https://www.googleapis.com/auth/bigquery']
+SCOPES = [
+    'https://www.googleapis.com/auth/analytics.readonly',
+    'https://www.googleapis.com/auth/bigquery']
 PROJECT = os.getenv('GCP_PROJECT_ID')
-creds, _ = default(scopes=SCOPES, default_scopes=SCOPES, quota_project_id=PROJECT)
+creds, _ = default(
+    scopes=SCOPES,
+    default_scopes=SCOPES,
+    quota_project_id=PROJECT)
 GA4_ENTITY = os.getenv('GA4_ENTITY')
 
 
@@ -105,16 +110,16 @@ def send_to_bq(df):
     ts = df['epoch_time_micros'].max()
     table = ts.strftime('%Y%m%d')
 
+
     df.to_gbq(
-        f'ga4_logs.ga4_logs_{table}',
+        'ga4_logs.ga4_logs',
         project_id=PROJECT,
         chunksize=None,
         reauth=False,
-        if_exists='fail',
+        if_exists='append',
         auth_local_webserver=True,
         table_schema=None,
         location=None,
-        progress_bar=True,
         credentials=creds
         )
 
