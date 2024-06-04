@@ -19,6 +19,7 @@ def get_access_report(n):
     client = AnalyticsAdminServiceClient(credentials=creds)
     access_dict = {
       "entity": GA4_ENTITY,
+      "limit": 100000,
       "date_ranges": [
         {
           "start_date": f"{n}daysAgo",
