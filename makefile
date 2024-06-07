@@ -1,7 +1,8 @@
 -include .env
+GCP_PROJECT_ID := ga4-analytics-352613
 
 login:
-	gcloud auth application-default login --scopes=https://www.googleapis.com/auth/analytics.readonly --billing-project=$(GCP_PROJECT_ID)
+	gcloud auth application-default login --scopes=https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/bigquery --billing-project=$(GCP_PROJECT_ID)
 	
 set-project:	
 	gcloud auth application-default set-quota-project $(GCP_PROJECT_ID)
