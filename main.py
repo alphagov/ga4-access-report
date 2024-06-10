@@ -98,18 +98,14 @@ def format_access_report(response):
       'accessCount': 'access_count',
       'dataApiQuotaPropertyTokensConsumed': 'api_tokens_consumed'})
 
-    df['access_count'] = pd.to_numeric(df['access_count'])
-    df['api_tokens_consumed'] = pd.to_numeric(df['api_tokens_consumed'])
+    df['access_count'] = pd.to_numeric(df['access_count'], errors='coerce')
+    df['api_tokens_consumed'] = pd.to_numeric(df['api_tokens_consumed'], errors='coerce')
     df['domain'] = df['user_email'].apply(lambda x: re.search(r'@.*$', str(x)).group())
-    df.set_index('epoch_time_micros', inplace=True)
-    output = df.resample('min').sum()
-    return output
+
+    return df
 
 
 def send_to_bq(df):
-    ts = df['epoch_time_micros'].max()
-    table = ts.strftime('%Y%m%d')
-
 
     df.to_gbq(
         'ga4_logs.ga4_logs',
@@ -128,9 +124,11 @@ def send_to_bq(df):
 def run(request, n=1):
     access_records = get_access_report(n)
     df = format_access_report(access_records)
+    df.dtypes
     try:
         send_to_bq(df)
         return "all good"
+
     except Exception as e:
         print(df.head(n=5))
         print(e)
@@ -138,4 +136,4 @@ def run(request, n=1):
 
 
 if __name__ == '__main__':
-    run(request='', n=1)
+    run(request='', n=3)
