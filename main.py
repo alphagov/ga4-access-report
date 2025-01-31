@@ -121,7 +121,7 @@ def send_to_bq(df):
 
 
 @functions_framework.http
-def run(request, n=16):
+def run(request, n=1):
     access_records = get_access_report(n)
     df = format_access_report(access_records)
     df.dtypes
