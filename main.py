@@ -100,7 +100,7 @@ def format_access_report(response):
 
     df['access_count'] = pd.to_numeric(df['access_count'], errors='coerce')
     df['api_tokens_consumed'] = pd.to_numeric(df['api_tokens_consumed'], errors='coerce')
-    df['domain'] = df['user_email'].apply(lambda x: re.search(r'@.*$', str(x)).group())
+    df['domain'] = df['user_email'].apply(lambda x: re.search(r'(@.*$)?', str(x)).group())
 
     return df
 
@@ -121,7 +121,7 @@ def send_to_bq(df):
 
 
 @functions_framework.http
-def run(request, n=1):
+def run(request, n=16):
     access_records = get_access_report(n)
     df = format_access_report(access_records)
     df.dtypes
@@ -130,6 +130,7 @@ def run(request, n=1):
         return "all good"
 
     except Exception as e:
+        print(df.shape)
         print(df.head(n=5))
         print(e)
         return "all bad"
